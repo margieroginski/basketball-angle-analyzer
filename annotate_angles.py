@@ -13,6 +13,10 @@ Usage:
         --show-skeleton True --show-overlay True
 """
 
+# get around streamlit issue with importing cv2
+import os
+os.system("pip install opencv-python-headless==4.10.0.84 --force-reinstall --no-cache-dir > /dev/null 2>&1")
+
 import argparse
 import time
 from collections import deque
