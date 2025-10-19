@@ -253,28 +253,7 @@ def process_video(
                     knee_flex = 180 - knee_sm  # Convert 180=straight → 0=straight
                     draw_text(annotated, f"Knee flex: {knee_flex:.1f} deg", (knee[0] + 10, knee[1] - 10), C["knee"], font_scale, text_thickness)
                     
-
-                # ---- KNEE POSITION (separate option) ----
-#                 if "knee_pos" in angles:
-#                     tol = 5
-#                     if use_left:
-#                         if knee[0] < ankle[0] - tol:
-#                             kp = "Behind toes"
-#                         elif abs(knee[0] - ankle[0]) <= tol:
-#                             kp = "Over toes"
-#                         else:
-#                             kp = "In front of toes"
-#                     else:
-#                         if knee[0] > ankle[0] + tol:
-#                             kp = "Behind toes"
-#                         elif abs(knee[0] - ankle[0]) <= tol:
-#                             kp = "Over toes"
-#                         else:
-#                             kp = "In front of toes"
-
-
                 # ---- KNEE POSITION (vs toe tip; fallback to ankle if toe not visible) ----
-
                 if "knee_pos" in angles:
                     tol = 5  # pixels; tweak if needed
                     # pick reference: toe tip if visible enough, else ankle
@@ -424,17 +403,6 @@ def process_video(
                     draw_text(annotated, f"Head: {head_sm:.1f} deg", (nose[0] + 10, nose[1] - 10),
                               C["head"], font_scale, text_thickness)
 
-                # ---- HAND (wrist flexion: forearm vs hand) ----
-                # old
-                # if "hand" in angles:
-                    # hand_ang = angle_between_three_points(elbow, wrist, index_f)
-                    # buffers["hand"].append(hand_ang)
-                    # hand_sm = nanmean(buffers["hand"])
-                    # angle_values["Hand"] = hand_sm
-                    # draw_segment(annotated, elbow, wrist, C["hand"], line_thickness, dot_radius)
-                    # draw_segment(annotated, wrist, index_f, C["hand"], line_thickness, dot_radius)
-                    # draw_text(annotated, f"Hand: {hand_sm:.1f} deg", (wrist[0] + 10, wrist[1] - 10),
-                    #           C["hand"], font_scale, text_thickness)
 
                 # ---- HAND (wrist flexion: forearm vs hand) ----
                 if "hand" in angles:
@@ -452,53 +420,6 @@ def process_video(
                               C["hand"], font_scale, text_thickness,
                     )
                     
-
-            # ---- SINGLE overlay panel (upper-right, shifted down & left) ----
-            
-            # ---- SINGLE overlay panel (upper-right, shifted down & left) ----
-            # old
-            # if show_overlay and (angle_values or knee_pos_label):
-            #     lines = [f"{k}: {v:.1f} deg" for k, v in angle_values.items()]
-            #     if "knee_pos" in angles and knee_pos_label:
-            #         lines.append(f"{knee_pos_label}")
-
-            #    line_h = int(20 + 8 * font_scale)
-            #     shift = int(1.5 * line_h)
-
-            #     # Measure text widths
-            #     maxw = 0
-            #     for s in lines:
-            #         (tw, th), _ = cv2.getTextSize(
-            #             s, cv2.FONT_HERSHEY_SIMPLEX, float(font_scale), int(text_thickness)
-            #         )
-            #         maxw = max(maxw, tw)
-
-            #     box_w = maxw + 20
-            #     top_pad = 10
-            #     bottom_pad = 15
-            #     box_h = top_pad + bottom_pad + line_h * len(lines)
-
-            #     top_left = (W - box_w - 10 - shift, 10 + shift)
-            #     bottom_right = (W - 10 - shift, top_left[1] + box_h)
-
-            #     overlay = annotated.copy()
-            #     cv2.rectangle(overlay, top_left, bottom_right, (0, 0, 0), -1)
-            #     cv2.addWeighted(overlay, 0.4, annotated, 0.6, 0, annotated)
-
-            #     # Draw lines evenly spaced inside the padded box
-            #     y = top_left[1] + top_pad + line_h
-            #     for s in lines:
-            #         cv2.putText(
-            #             annotated,
-            #             s,
-            #             (top_left[0] + 10, y),
-            #             cv2.FONT_HERSHEY_SIMPLEX,
-            #             float(font_scale),
-            #             (255, 255, 255),
-            #             int(text_thickness),
-            #             cv2.LINE_AA,
-            #         )
-            #         y += line_h
 
             # ---- SINGLE overlay panel (configurable placement) ----
             if show_overlay and (angle_values or knee_pos_label):
@@ -541,18 +462,6 @@ def process_video(
                     top_left = (W - box_w - margin - shift, margin + shift)  # fallback
                 bottom_right = (top_left[0] + box_w, top_left[1] + box_h)
                 
-                # margin = 10
-                # if overlay_position == "top-right":
-                #     top_left = (W - box_w - margin - shift, margin + shift)
-                # elif overlay_position == "top-left":
-                #     top_left = (margin, margin + shift)
-                # elif overlay_position == "bottom-right":
-                #     top_left = (W - box_w - margin - shift, H - box_h - margin - shift)
-                # elif overlay_position == "bottom-left":
-                #     top_left = (margin, H - box_h - margin - shift)
-                # else:
-                #     top_left = (W - box_w - margin - shift, margin + shift)  # fallback
-                # bottom_right = (top_left[0] + box_w, top_left[1] + box_h)
 
                 # Draw the background box
                 overlay = annotated.copy()
