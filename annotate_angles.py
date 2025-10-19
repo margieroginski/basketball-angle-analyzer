@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 
 """
@@ -104,6 +105,7 @@ def process_video(
     # out = cv2.VideoWriter(output_path, fourcc, fps, (W, H))
 
     # Use H.264 (safer for browser playback)
+    # made this change when trying to get it to run with streamlit (to avoid grey video play screen)
     fourcc = cv2.VideoWriter_fourcc(*"avc1")  # or 'H264' depending on your system
     out = cv2.VideoWriter(output_path, fourcc, fps, (W, H))
 
@@ -112,13 +114,15 @@ def process_video(
 
     # Colors for each metric
     C = {
-        "shin": (255, 0, 255),      # magenta
+#        "shin": (255, 0, 255),      # magenta
+        "shin": (255,  0, 180),     # bright pink
         "knee": (0, 255, 255),      # cyan
         "knee_pos": (0, 255, 255),  # same as knee
         "elbow": (0, 255, 0),       # green
         "hip": (0, 165, 255),       # orange-ish
         "torso": (0, 128, 255),     # teal-like
-        "head": (128, 0, 128),      # purple
+#        "head": (128, 0, 128),      # purple
+        "head": (0, 215, 255),      # gold
         "hand": (255, 150, 50),     # orange
     }
 
@@ -227,8 +231,8 @@ def process_video(
                     angle_values["Shin"] = shin_sm
                     draw_segment(annotated, knee, ankle, C["shin"], line_thickness, dot_radius)
                     # vertical reference line (light gray), a bit thinner for clarity
-                    cv2.line(annotated, ankle, (ankle[0], ankle[1] - 150), (200, 200, 200),
-                             int(max(1, line_thickness - 1)), cv2.LINE_AA)
+                    # cv2.line(annotated, ankle, (ankle[0], ankle[1] - 150), (200, 200, 200),
+                    #          int(max(1, line_thickness - 1)), cv2.LINE_AA)
                     draw_text(annotated, f"Shin: {shin_sm:.1f} deg", (ankle[0] + 10, ankle[1] - 10),
                               C["shin"], font_scale, text_thickness)
 
@@ -322,8 +326,35 @@ def process_video(
                     draw_segment(annotated, shoulder, elbow, C["elbow"], line_thickness, dot_radius)
                     draw_segment(annotated, elbow, wrist, C["elbow"], line_thickness, dot_radius)
                     draw_text(annotated, f"Elbow flex: {elbow_flex:.1f} deg",
-                              (elbow[0] + 10, elbow[1] - 10),
-                              C["elbow"], font_scale, text_thickness)                    
+#                              (elbow[0] + 10, elbow[1] - 10),
+                              (elbow[0] - 40, elbow[1] - 20),
+                              C["elbow"], font_scale, text_thickness)
+                    
+                    # ---- ELBOW HEIGHT (vertical offset vs shoulder, in pixels; + = above) ----
+                    elbow_height_label = None
+                    if "elbow_height" in angles:
+                        # Positive if elbow is higher (smaller y) than shoulder: shoulder.y - elbow.y
+                        # Note: in image coords, y grows downward; so (shoulder_y - elbow_y) > 0 means elbow above shoulder
+                        dy_px = float(shoulder[1] - elbow[1])
+                        buffers["elbow_height"].append(dy_px)
+                        eh_sm = nanmean(buffers["elbow_height"])
+
+                        elbow_height_label = f"Elbow height: {eh_sm:+.0f} px (vs shoulder)"
+
+                        # Draw the text near the elbow (offset a bit above the elbow label if present)
+                        draw_text(
+                            annotated,
+                            f"Elbow height: {eh_sm:+.0f} px",
+#                            (elbow[0] + 10, elbow[1] - 50),
+                            (elbow[0] -40, elbow[1] - 40),
+                            C["elbow"],
+                            font_scale,
+                            text_thickness
+                        )
+
+                    # Optional: a light vertical guide from shoulder to elbow (comment out if you don’t want it)
+                    # cv2.line(annotated, (shoulder[0], shoulder[1]), (elbow[0], elbow[1]), (180, 180, 180), max(1, line_thickness - 1), cv2.LINE_AA)
+                
                     
 
                 # ---- HIP (hip flexion) ----
@@ -413,7 +444,7 @@ def process_video(
                     angle_values["Hand flex"] = hand_flex
                     draw_segment(annotated, elbow, wrist, C["hand"], line_thickness, dot_radius)
                     draw_segment(annotated, wrist, index_f, C["hand"], line_thickness, dot_radius)
-                    draw_text(annotated, f"Hand flex: {hand_flex:.1f} deg", (wrist[0] + 10, wrist[1] - 10),
+                    draw_text(annotated, f"Hand flex: {hand_flex:.1f} deg", (wrist[0] - 50 , wrist[1] + 40),
                               C["hand"], font_scale, text_thickness,
                     )
                     
@@ -467,10 +498,15 @@ def process_video(
 
             # ---- SINGLE overlay panel (configurable placement) ----
             if show_overlay and (angle_values or knee_pos_label):
+
                 lines = [f"{k}: {v:.1f} deg" for k, v in angle_values.items()]
                 if "knee_pos" in angles and knee_pos_label:
-                    lines.append(f"Knee pos: {knee_pos_label}")
-
+                    lines.append(f"{knee_pos_label}")
+                    
+                # Add elbow height line if present
+                if "elbow_height" in angles and elbow_height_label:
+                    lines.append(elbow_height_label)
+                
                 line_h = int(20 + 8 * font_scale)
                 shift = int(1.5 * line_h)
 
@@ -583,19 +619,20 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--angles",
-        default="shin,knee,knee_pos,elbow,hip,torso,head,hand",
+        default="shin,knee,knee_pos,elbow,elbow_height,hip,torso,head,hand",
         help=(
             "Comma-separated list of angles to annotate.\n\n"
             "Available options:\n"
-            "  shin     - Shin angle relative to vertical (draws a vertical reference line at the ankle)\n"
-            "  knee     - Knee flexion angle (thigh vs shin)\n"
-            "  knee_pos - Knee position relative to toes (Behind / Over / In front). Same color as knee.\n"
-            "             If 'knee' is also selected, this shows to the RIGHT of the knee angle.\n"
-            "  elbow    - Elbow flexion angle (upper vs lower arm)\n"
-            "  hip      - Hip flexion angle (torso vs thigh)\n"
-            "  torso    - Torso lean angle relative to vertical (at hip)\n"
-            "  head     - Head tilt relative to torso (shoulder anchor)\n"
-            "  hand     - Hand flexion angle (forearm vs hand; wrist → index direction)\n\n"
+            "  shin         - Shin angle relative to vertical (draws a vertical reference line at the ankle)\n"
+            "  knee         - Knee flexion angle (thigh vs shin)\n"
+            "  knee_pos     - Knee position relative to toes (Behind / Over / In front). Same color as knee.\n"
+            "                 If 'knee' is also selected, this shows to the RIGHT of the knee angle.\n"
+            "  elbow        - Elbow flexion angle (upper vs lower arm)\n"
+            "  elbow_height - Elbow vertical offset vs shoulder (px; + above / - below)\n"
+            "  hip          - Hip flexion angle (torso vs thigh)\n"
+            "  torso        - Torso lean angle relative to vertical (at hip)\n"
+            "  head         - Head tilt relative to torso (shoulder anchor)\n"
+            "  hand         - Hand flexion angle (forearm vs hand; wrist → index direction)\n\n"
             "Example:\n"
             "  --angles knee,knee_pos,hip,hand"
         )
