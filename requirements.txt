@@ -1,5 +1,6 @@
 streamlit==1.38.0
-mediapipe==0.10.14
+opencv-python-headless==4.10.0.84
+mediapipe==0.10.11
 tqdm==4.66.5
 numpy==1.26.4
 imageio-ffmpeg==0.5.1
