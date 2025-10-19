@@ -73,10 +73,6 @@ with c2:
     line_thickness = st.slider("Line thickness", 1, 10, 2)
     dot_radius = st.slider("Joint dot radius", 1, 12, 3)
 
-st.subheader("Debug")
-debug = st.checkbox("Verbose console logs (`--debug`)", False)
-debug_window_requested = st.checkbox("Desktop-only live preview windows (`--debug-window`)", False,
-                                     help="Uses OpenCV GUI windows. Not supported on Streamlit Cloud.")
 
 # Detect Streamlit Cloud-ish environment
 is_cloud = os.environ.get("STREAMLIT_RUNTIME", "") == "cloud" or "streamlit" in platform.platform().lower()
@@ -109,46 +105,68 @@ if run_clicked:
             cmd.append("--show-overlay")
         if show_skeleton:
             cmd.append("--show-skeleton")
-        if debug:
-            cmd.append("--debug")
 
-        if debug_window_requested:
-            if is_cloud:
-                st.info("`--debug-window` is not supported on Streamlit Cloud; skipping this flag.")
-            else:
-                cmd.append("--debug-window")
+        st.write("🚀 Running analysis... This may take a minute.")
+        st.write("```" + " ".join(cmd) + "```")
 
-        st.write("🚀 Running:")
-        st.code(" ".join([str(c) for c in cmd]), language="bash")
+        import time
 
         with st.spinner("Processing video..."):
-            # Run annotate script
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            subprocess.run(cmd)
 
-        # Show console output (useful when --debug is on or errors occur)
-        with st.expander("Show console output", expanded=False):
-            st.text(result.stdout)
-            st.error(result.stderr) if result.returncode != 0 else None
+        # Wait briefly to ensure OpenCV flushes and file is fully written
+#        time.sleep(1)
 
-        # Wait briefly to ensure file is flushed and closed
-        time.sleep(1)
-
-        if result.returncode != 0:
-            st.error("The processing script exited with an error.")
-        elif not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
-            st.error("❌ Output video appears empty or missing.")
+        if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+            st.error("❌ Output video appears empty — processing may have failed.")
         else:
             st.success("✅ Processing complete!")
-            # Read bytes to avoid browser gray player issue
+            st.video(output_path)
+#            with open(output_path, "rb") as f:
+#                video_bytes = f.read()
+#            st.video(video_bytes)
+            
+            #st.video(output_path)
+            print(f"opening {output_path}")
             with open(output_path, "rb") as f:
-                data = f.read()
-            st.video(data)
-            st.download_button(
-                label="Download annotated video",
-                data=data,
-                file_name="annotated.mp4",
-                mime="video/mp4"
-            )
+                st.download_button(
+                    label="Download annotated video",
+                    data=f,
+                    file_name="annotated.mp4",
+                    mime="video/mp4"
+                )
+
+#         st.write("🚀 Running:")
+#         st.code(" ".join([str(c) for c in cmd]), language="bash")
+# 
+#         with st.spinner("Processing video..."):
+#             # Run annotate script
+#             result = subprocess.run(cmd, capture_output=True, text=True)
+# 
+#         # Show console output (useful when --debug is on or errors occur)
+#         with st.expander("Show console output", expanded=False):
+#             st.text(result.stdout)
+#             st.error(result.stderr) if result.returncode != 0 else None
+# 
+#         # Wait briefly to ensure file is flushed and closed
+#         time.sleep(1)
+# 
+#         if result.returncode != 0:
+#             st.error("The processing script exited with an error.")
+#         elif not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+#             st.error("❌ Output video appears empty or missing.")
+#         else:
+#             st.success("✅ Processing complete!")
+#             # Read bytes to avoid browser gray player issue
+#             with open(output_path, "rb") as f:
+#                 data = f.read()
+#             st.video(data)
+#             st.download_button(
+#                 label="Download annotated video",
+#                 data=data,
+#                 file_name="annotated.mp4",
+#                 mime="video/mp4"
+#             )
 
 # Footer help
 with st.expander("What each option does"):
