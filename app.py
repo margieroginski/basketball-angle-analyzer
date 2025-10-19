@@ -73,10 +73,10 @@ with c2:
     line_thickness = st.slider("Line thickness", 1, 10, 2)
     dot_radius = st.slider("Joint dot radius", 1, 12, 3)
 
-# st.subheader("Debug")
-# debug = st.checkbox("Verbose console logs (`--debug`)", False)
-# debug_window_requested = st.checkbox("Desktop-only live preview windows (`--debug-window`)", False,
-#                                      help="Uses OpenCV GUI windows. Not supported on Streamlit Cloud.")
+st.subheader("Debug")
+debug = st.checkbox("Verbose console logs (`--debug`)", False)
+debug_window_requested = st.checkbox("Desktop-only live preview windows (`--debug-window`)", False,
+                                     help="Uses OpenCV GUI windows. Not supported on Streamlit Cloud.")
 
 # Detect Streamlit Cloud-ish environment
 is_cloud = os.environ.get("STREAMLIT_RUNTIME", "") == "cloud" or "streamlit" in platform.platform().lower()
