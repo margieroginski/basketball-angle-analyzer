@@ -115,7 +115,7 @@ if run_clicked:
             subprocess.run(cmd)
 
         # Wait briefly to ensure OpenCV flushes and file is fully written
-#        time.sleep(1)
+        time.sleep(1)
 
         if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
             st.error("❌ Output video appears empty — processing may have failed.")
