@@ -72,6 +72,133 @@ def draw_text(img, text, org, color, font_scale, text_thickness):
                 float(font_scale), color, int(text_thickness), cv2.LINE_AA)
 
 
+def draw_label(frame, text, x_anchor, y, color=(255, 255, 255), font_scale=0.6, thickness=1, font=cv2.FONT_HERSHEY_SIMPLEX, align='left', line_type=cv2.LINE_AA):
+    """
+    Draws text on the frame with consistent visual alignment.
+
+    Args:
+        frame: The image to draw on.
+        text: The string to draw.
+        x_anchor: The fixed x position for alignment.
+        y: The y coordinate of the text baseline.
+        font, font_scale, color, thickness, line_type: OpenCV text parameters.
+        align: 'left', 'center', or 'right'.
+    """
+    text_size, _ = cv2.getTextSize(text, font, font_scale, thickness)
+    text_width = text_size[0]
+
+    if align == 'center':
+        org = (int(x_anchor - text_width // 2), int(y))
+    elif align == 'right':
+        org = (int(x_anchor - text_width), int(y))
+    else:  # left alignment (default)
+        org = (int(x_anchor), int(y))
+
+    cv2.putText(frame, text, org, font, font_scale, color, thickness, line_type)
+    
+
+# def get_text_anchor(lms, W, H, idx, prev_center_x=None, smooth=True):
+#     """
+#     Compute a stable horizontal anchor position for text labels.
+#     Keeps all text aligned vertically with body joints but anchored
+#     on one side of the person.
+# 
+#     Args:
+#         lms: List of MediaPipe landmarks
+#         W, H: Frame width and height
+#         idx: The index namespace (e.g., mp.solutions.pose.PoseLandmark)
+#         prev_center_x: Previously smoothed body center x
+#         smooth (bool): Whether to apply temporal smoothing
+# 
+#     Returns:
+#         text_anchor_x (int): The x position to anchor text
+#         anchor_side (str): "left" or "right"
+#         smoothed_center_x (float): Smoothed body center for reuse
+#     """
+# 
+#     # Key body landmarks for estimating body center
+#     body_landmarks = [
+#         idx.LEFT_HIP, idx.RIGHT_HIP,
+#         idx.LEFT_SHOULDER, idx.RIGHT_SHOULDER,
+#         idx.LEFT_KNEE, idx.RIGHT_KNEE
+#     ]
+# 
+#     body_xs = [lms[i].x for i in body_landmarks if lms[i].visibility > 0.5]
+#     body_center_x = np.mean(body_xs) if body_xs else 0.5
+# 
+#     # Optional temporal smoothing for stability
+#     if smooth and prev_center_x is not None:
+#         alpha = 0.9
+#         body_center_x = alpha * prev_center_x + (1 - alpha) * body_center_x
+# 
+#     # Decide which side of the frame to place the text
+#     if body_center_x < 0.5:
+#         anchor_side = "right"
+#         text_anchor_x = int(min(W * (body_center_x + 0.25), W - 150))
+#     else:
+#         anchor_side = "left"
+#         text_anchor_x = int(max(W * (body_center_x - 0.25), 20))
+# 
+#     return text_anchor_x, anchor_side, body_center_x
+
+
+def get_text_anchor(frame_idx, lms, W, H, idx, prev_center_x=None, smooth=False):
+    """
+    Compute a stable horizontal anchor position for text labels.
+    Keeps all text aligned vertically with body joints but anchored
+    on one side of the person.
+
+    Args:
+        lms: List of MediaPipe landmarks
+        W, H: Frame width and height
+        idx: The index namespace (e.g., mp.solutions.pose.PoseLandmark)
+        prev_center_x: Previously smoothed body center x (float)
+        smooth (bool): Whether to apply temporal smoothing
+
+    Returns:
+        text_anchor_x (int): X position to anchor text
+        anchor_side (str): "left" or "right"
+        smoothed_center_x (float): Smoothed body center for reuse next frame
+    """
+
+    # Key body landmarks for estimating body center
+    body_landmarks = [
+        idx.LEFT_HIP, idx.RIGHT_HIP,
+        idx.LEFT_SHOULDER, idx.RIGHT_SHOULDER,
+        idx.LEFT_KNEE, idx.RIGHT_KNEE
+    ]
+
+    body_xs = [lms[i].x for i in body_landmarks if lms[i].visibility > 0.5]
+    body_center_x = np.mean(body_xs) if body_xs else 0.5
+    # print(f"\nframe_idx: {frame_idx}")
+    # print(f"body_center_x = {body_center_x}, prev_center_x = {prev_center_x}")
+
+    # Temporal smoothing for stable horizontal anchor
+    if smooth and prev_center_x is not None:
+        alpha = 0.9  # adjust for smoother/slower response
+        body_center_x = alpha * prev_center_x + (1 - alpha) * body_center_x
+        smoothed_center_x = alpha * prev_center_x + (1 - alpha) * body_center_x
+        # print(f"  body_center_x = {body_center_x}, smoothed_center_x = {smoothed_center_x}")
+    else:
+        smoothed_center_x = body_center_x
+        # print(f"  smoothed_center_x = {smoothed_center_x}")
+
+    # Decide which side of the frame to anchor the text
+    if smoothed_center_x < 0.5:
+        anchor_side = "right"
+        text_anchor_x = int(min(W * (smoothed_center_x + 0.5), W - 150))  # .25 -> .35
+    else:
+        anchor_side = "left"
+        text_anchor_x = int(max(W * (smoothed_center_x - 0.5), 20)) # .25 -> .5
+
+    # print(f"  {anchor_side}: text_anchor_x = {text_anchor_x}")
+        
+
+    return text_anchor_x, anchor_side, smoothed_center_x
+
+    
+
+
 # -----------------------
 # Main
 # -----------------------
@@ -91,6 +218,11 @@ def process_video(
     line_thickness=2,
     dot_radius=3,
 ):
+
+    if args.save_frames:
+        frame_dir = "debug_frames"
+        os.makedirs(frame_dir, exist_ok=True)
+    
     mp_pose = mp.solutions.pose
     mp_draw = mp.solutions.drawing_utils
     pose = mp_pose.Pose(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5)
@@ -150,12 +282,14 @@ def process_video(
     pbar = tqdm(total=nframes if nframes > 0 else None, desc="Processing frames")
     t0 = time.time()
     processed = 0
+    frame_idx = 0
 
     try:
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
+            frame_idx += 1
 
             # Read live sizes from sliders (if enabled)
             if show_debug_windows:
@@ -164,7 +298,8 @@ def process_video(
                 tt   = cv2.getTrackbarPos("TextThick", "Controls")
                 lt   = cv2.getTrackbarPos("LineThick", "Controls")
                 dr   = cv2.getTrackbarPos("DotRadius", "Controls")
-                # print(f"fs10  - {fs10}")
+                
+                print(f"frame_index = {frame_idx} fs10  = {fs10}, textthick = {tt}, linethick = {lt}, dotradius = {dr}")
                 font_scale     = max(0.1, fs10 / 10.0)
 
                 # print(f"font_scale is {font_scale}")
@@ -221,6 +356,12 @@ def process_video(
                         mp_draw.DrawingSpec(color=(255, 255, 255), thickness=int(line_thickness))
                     )
 
+                # Identify x-axis anchor for text
+                text_anchor_x, anchor_side, prev_center_x = get_text_anchor(
+                    frame_idx, lms, W, H, idx, prev_center_x if 'prev_center_x' in locals() else None
+                )
+
+
                 # ---- SHIN (angle vs vertical) + vertical reference line ----
                 if "shin" in angles:
                     # old
@@ -237,21 +378,25 @@ def process_video(
                     # vertical reference line (light gray), a bit thinner for clarity
                     # cv2.line(annotated, ankle, (ankle[0], ankle[1] - 150), (200, 200, 200),
                     #          int(max(1, line_thickness - 1)), cv2.LINE_AA)
-                    draw_text(annotated, f"Shin: {shin_sm:.1f} deg", (ankle[0] + 10, ankle[1] - 10),
-                              C["shin"], font_scale, text_thickness)
+                    # OLD draw_text(annotated, f"Shin: {shin_sm:.1f} deg", (ankle[0] + 10, ankle[1] - 10),
+                    # OLD          C["shin"], font_scale, text_thickness)
+                    # draw_text(annotated, f"Shin: {shin_sm:.1f} deg", (text_anchor_x, ankle[1] - 10), C["shin"], font_scale, text_thickness)
+                    # draw_text(annotated, f"Shin: {shin_sm:.1f} deg", (text_anchor_x, ankle[1] - 10), C["shin"], font_scale, text_thickness)
+                    draw_label(annotated, f"Shin: {shin_sm:.1f} deg", text_anchor_x, ankle[1] - 10, C["shin"], font_scale, text_thickness)
 
                 # ---- KNEE angle ----
                 if "knee" in angles:
                     knee_angle = angle_between_three_points(hip, knee, ankle)
                     buffers["knee"].append(knee_angle)
                     knee_sm = nanmean(buffers["knee"])
-                    angle_values["Knee"] = knee_sm
+
+                    # Convert so 0° = straight leg, increases with flexion
+                    knee_flex = 180 - knee_sm  # Convert 180=straight → 0=straight
+                    angle_values["Knee flex"] = knee_flex
                     draw_segment(annotated, hip, knee, C["knee"], line_thickness, dot_radius)
                     draw_segment(annotated, knee, ankle, C["knee"], line_thickness, dot_radius)
-                    # old draw_text(annotated, f"Knee: {knee_sm:.1f} deg", (knee[0] + 10, knee[1] - 10), C["knee"], font_scale, text_thickness)
-                    # new from margie
-                    knee_flex = 180 - knee_sm  # Convert 180=straight → 0=straight
-                    draw_text(annotated, f"Knee flex: {knee_flex:.1f} deg", (knee[0] + 10, knee[1] - 10), C["knee"], font_scale, text_thickness)
+#                    draw_text(annotated, f"Knee flex: {knee_flex:.1f} deg", (knee[0] + 10, knee[1] - 10), C["knee"], font_scale, text_thickness)
+                    draw_label(annotated, f"Knee flex: {knee_flex:.1f} deg", text_anchor_x, knee[1] - 10, C["knee"], font_scale, text_thickness)
                     
                 # ---- KNEE POSITION (vs toe tip; fallback to ankle if toe not visible) ----
                 if "knee_pos" in angles:
@@ -280,24 +425,14 @@ def process_video(
 
                     if "knee" in angles:
                         # place below the knee angle label
-                        text_org = (knee[0] + 10, knee[1] + 15) # was 20
+                        text_org = (text_anchor_x, knee[1] + 15) # was 20
                     else:
                         # place near knee even if knee angle isn't shown
-                        text_org = (knee[0] + 10, knee[1] - 10)
-                    draw_text(annotated, f"{kp}", text_org, C["knee_pos"], font_scale, text_thickness)
+                        text_org = (text_anchor_x, knee[1] - 10)
+                    draw_label(annotated, f"{kp}", *text_org, C["knee_pos"], font_scale, text_thickness)
 
                 # ---- ELBOW ----
                 if "elbow" in angles:
-                    # old
-                    # elbow_angle = angle_between_three_points(shoulder, elbow, wrist)
-                    # buffers["elbow"].append(elbow_angle)
-                    # elbow_sm = nanmean(buffers["elbow"])
-                    # angle_values["Elbow"] = elbow_sm
-                    # draw_segment(annotated, shoulder, elbow, C["elbow"], line_thickness, dot_radius)
-                    # draw_segment(annotated, elbow, wrist, C["elbow"], line_thickness, dot_radius)
-                    # draw_text(annotated, f"Elbow: {elbow_sm:.1f} deg", (elbow[0] + 10, elbow[1] - 10),
-                    #           C["elbow"], font_scale, text_thickness)
-
                     elbow_angle = angle_between_three_points(shoulder, elbow, wrist)
                     buffers["elbow"].append(elbow_angle)
                     elbow_sm = nanmean(buffers["elbow"])
@@ -308,32 +443,34 @@ def process_video(
                     angle_values["Elbow flex"] = elbow_flex
                     draw_segment(annotated, shoulder, elbow, C["elbow"], line_thickness, dot_radius)
                     draw_segment(annotated, elbow, wrist, C["elbow"], line_thickness, dot_radius)
-                    draw_text(annotated, f"Elbow flex: {elbow_flex:.1f} deg",
+                    draw_label(annotated, f"Elbow flex: {elbow_flex:.1f} deg",
 #                              (elbow[0] + 10, elbow[1] - 10),
-                              (elbow[0] - 40, elbow[1] - 20),
+#                              (elbow[0] - 40, elbow[1] - 20),
+                              text_anchor_x, elbow[1] - 20,
                               C["elbow"], font_scale, text_thickness)
                     
-                    # ---- ELBOW HEIGHT (vertical offset vs shoulder, in pixels; + = above) ----
-                    elbow_height_label = None
-                    if "elbow_height" in angles:
-                        # Positive if elbow is higher (smaller y) than shoulder: shoulder.y - elbow.y
-                        # Note: in image coords, y grows downward; so (shoulder_y - elbow_y) > 0 means elbow above shoulder
-                        dy_px = float(shoulder[1] - elbow[1])
-                        buffers["elbow_height"].append(dy_px)
-                        eh_sm = nanmean(buffers["elbow_height"])
+                # ---- ELBOW HEIGHT (vertical offset vs shoulder, in pixels; + = above) ----
+                elbow_height_label = None
+                if "elbow_height" in angles:
+                    # Positive if elbow is higher (smaller y) than shoulder: shoulder.y - elbow.y
+                    # Note: in image coords, y grows downward; so (shoulder_y - elbow_y) > 0 means elbow above shoulder
+                    dy_px = float(shoulder[1] - elbow[1])
+                    buffers["elbow_height"].append(dy_px)
+                    eh_sm = nanmean(buffers["elbow_height"])
 
-                        elbow_height_label = f"Elbow height: {eh_sm:+.0f} px (vs shoulder)"
+                    elbow_height_label = f"Elbow height: {eh_sm:+.0f} px (vs shoulder)"
 
-                        # Draw the text near the elbow (offset a bit above the elbow label if present)
-                        draw_text(
-                            annotated,
-                            f"Elbow height: {eh_sm:+.0f} px",
-#                            (elbow[0] + 10, elbow[1] - 50),
-                            (elbow[0] -40, elbow[1] - 40),
-                            C["elbow"],
-                            font_scale,
-                            text_thickness
-                        )
+                    # Draw the text near the elbow (offset a bit above the elbow label if present)
+                    draw_label(
+                        annotated,
+                        f"Elbow height: {eh_sm:+.0f} px",
+#                       (elbow[0] + 10, elbow[1] - 50),
+#                       (elbow[0] -40, elbow[1] - 40),
+                        text_anchor_x, elbow[1] - 45,  # changed from 40
+                        C["elbow"],
+                        font_scale,
+                        text_thickness
+                    )
 
                     # Optional: a light vertical guide from shoulder to elbow (comment out if you don’t want it)
                     # cv2.line(annotated, (shoulder[0], shoulder[1]), (elbow[0], elbow[1]), (180, 180, 180), max(1, line_thickness - 1), cv2.LINE_AA)
@@ -342,16 +479,6 @@ def process_video(
 
                 # ---- HIP (hip flexion) ----
                 if "hip" in angles:
-                    # old
-                    # hip_flex = angle_between_three_points(shoulder, hip, knee)
-                    # buffers["hip"].append(hip_flex)
-                    # hip_sm = nanmean(buffers["hip"])
-                    # angle_values["Hip flex"] = hip_sm
-                    # draw_segment(annotated, shoulder, hip, C["hip"], line_thickness, dot_radius)
-                    # draw_segment(annotated, hip, knee, C["hip"], line_thickness, dot_radius)
-                    # draw_text(annotated, f"Hip flex: {hip_sm:.1f} deg", (hip[0] + 10, hip[1] - 10),
-                    #           C["hip"], font_scale, text_thickness)
-
                     hip_angle = angle_between_three_points(shoulder, hip, knee)
                     buffers["hip"].append(hip_angle)
                     hip_sm = nanmean(buffers["hip"])
@@ -362,8 +489,8 @@ def process_video(
                     angle_values["Hip flex"] = hip_flex
                     draw_segment(annotated, shoulder, hip, C["hip"], line_thickness, dot_radius)
                     draw_segment(annotated, hip, knee, C["hip"], line_thickness, dot_radius)
-                    draw_text(annotated, f"Hip flex: {hip_flex:.1f} deg", (hip[0] + 10, hip[1] - 10),
-                              C["hip"], font_scale, text_thickness)
+#                    draw_text(annotated, f"Hip flex: {hip_flex:.1f} deg", (hip[0] + 10, hip[1] - 10), C["hip"], font_scale, text_thickness)
+                    draw_label(annotated, f"Hip flex: {hip_flex:.1f} deg", text_anchor_x, hip[1] - 10, C["hip"], font_scale, text_thickness)
                     
 
                 # ---- TORSO (lean vs vertical) ----
@@ -387,8 +514,9 @@ def process_video(
 
                     angle_values["Torso"] = torso_lean
                     draw_segment(annotated, hip, shoulder, C["torso"], line_thickness, dot_radius)
-                    draw_text(annotated, f"Torso lean: {torso_lean:.1f} deg",
-                              (shoulder[0] + 10, shoulder[1] - 10),
+                    draw_label(annotated, f"Torso lean: {torso_lean:.1f} deg",
+#                              (shoulder[0] + 10, shoulder[1] - 10),
+                              text_anchor_x, shoulder[1] - 10,
                               C["torso"], font_scale, text_thickness)
                     
 
@@ -400,8 +528,8 @@ def process_video(
                     head_sm = nanmean(buffers["head"])
                     angle_values["Head"] = head_sm
                     draw_segment(annotated, shoulder, nose, C["head"], line_thickness, dot_radius)
-                    draw_text(annotated, f"Head: {head_sm:.1f} deg", (nose[0] + 10, nose[1] - 10),
-                              C["head"], font_scale, text_thickness)
+#                    draw_text(annotated, f"Head: {head_sm:.1f} deg", (nose[0] + 10, nose[1] - 10), C["head"], font_scale, text_thickness)
+                    draw_label(annotated, f"Head: {head_sm:.1f} deg", text_anchor_x, nose[1], C["head"], font_scale, text_thickness)                    
 
 
                 # ---- HAND (wrist flexion: forearm vs hand) ----
@@ -416,8 +544,8 @@ def process_video(
                     angle_values["Hand flex"] = hand_flex
                     draw_segment(annotated, elbow, wrist, C["hand"], line_thickness, dot_radius)
                     draw_segment(annotated, wrist, index_f, C["hand"], line_thickness, dot_radius)
-                    draw_text(annotated, f"Hand flex: {hand_flex:.1f} deg", (wrist[0] - 50 , wrist[1] + 40),
-                              C["hand"], font_scale, text_thickness,
+#                    draw_text(annotated, f"Hand flex: {hand_flex:.1f} deg", (wrist[0] - 50 , wrist[1] + 40), C["hand"], font_scale, text_thickness,
+                    draw_label(annotated, f"Hand flex: {hand_flex:.1f} deg", text_anchor_x , wrist[1] + 40, C["hand"], font_scale, text_thickness,
                     )
                     
 
@@ -483,6 +611,10 @@ def process_video(
                     )
                     y += line_h
 
+            if args.save_frames:
+                frame_path = os.path.join(frame_dir, f"frame_{frame_idx:05d}.jpg")
+                cv2.imwrite(frame_path, annotated)
+                    
 
             # write / preview
             out.write(annotated)
@@ -574,6 +706,13 @@ if __name__ == "__main__":
         default="bottom-right",
         help="Position of the overlay panel (default: top-right)."
     )
+
+    parser.add_argument(
+        "--save-frames",
+        action="store_true",
+        help="Save each processed frame as an image (for debugging)"
+    )
+    
     
 
     args = parser.parse_args()
