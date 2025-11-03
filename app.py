@@ -3,6 +3,7 @@ import sys
 import time
 import platform
 import subprocess
+from pathlib import Path
 import streamlit as st
 
 st.set_page_config(page_title="Basketball Angle Analyzer", layout="centered")
@@ -15,11 +16,21 @@ st.write("Upload a side-view basketball video and choose which body angles to an
 # ────────────────────────────────────────────────────────────────────────────────
 # File upload
 # ────────────────────────────────────────────────────────────────────────────────
-uploaded_file = st.file_uploader("Upload your .mp4 video", type=["mp4"])
+uploaded_file = st.file_uploader("Upload your .mp4 or .mov video", type=["mp4", "mov"])
 input_path = "input.mp4"
 output_path = "annotated.mp4"
 
 if uploaded_file:
+    suffix = Path(uploaded_file.name).suffix.lower()
+    if suffix not in {".mp4", ".mov"}:
+        suffix = ".mp4"
+    input_path = f"input{suffix}"
+
+    # Remove any stale input file with the alternate extension to avoid confusion
+    for candidate in {"input.mp4", "input.mov"} - {input_path}:
+        if os.path.exists(candidate):
+            os.remove(candidate)
+
     with open(input_path, "wb") as f:
         f.write(uploaded_file.read())
     st.success(f"✅ Uploaded: {uploaded_file.name}")

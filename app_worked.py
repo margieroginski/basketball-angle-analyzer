@@ -1,6 +1,7 @@
 import streamlit as st
 import subprocess
 import os
+from pathlib import Path
 
 st.set_page_config(page_title="Basketball Angle Analyzer", layout="centered")
 
@@ -8,9 +9,19 @@ st.title("🏀 Basketball Angle Analyzer")
 st.write("Upload a side-view video and choose which body angles to annotate.")
 
 # --- Upload section ---
-uploaded_file = st.file_uploader("Upload your .mp4 video", type=["mp4"])
+uploaded_file = st.file_uploader("Upload your .mp4 or .mov video", type=["mp4", "mov"])
+input_path = "input.mp4"
 if uploaded_file:
-    with open("input.mp4", "wb") as f:
+    suffix = Path(uploaded_file.name).suffix.lower()
+    if suffix not in {".mp4", ".mov"}:
+        suffix = ".mp4"
+    input_path = f"input{suffix}"
+
+    for candidate in {"input.mp4", "input.mov"} - {input_path}:
+        if os.path.exists(candidate):
+            os.remove(candidate)
+
+    with open(input_path, "wb") as f:
         f.write(uploaded_file.read())
     st.success(f"✅ Uploaded: {uploaded_file.name}")
 
@@ -44,7 +55,7 @@ if st.button("Process Video"):
         # Build the command
         cmd = [
             "python", "annotate_angles.py",
-            "--input", "input.mp4",
+            "--input", input_path,
             "--output", output_path,
             "--angles", ",".join(angles),
             "--smoothing", str(smoothing),
