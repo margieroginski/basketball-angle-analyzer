@@ -14,8 +14,8 @@ Usage:
 """
 
 # get around streamlit issue with importing cv2
-import os
-os.system("pip install opencv-python-headless==4.10.0.84 --force-reinstall --no-cache-dir > /dev/null 2>&1")
+# import os
+# os.system("pip install opencv-python-headless==4.10.0.84 --force-reinstall --no-cache-dir > /dev/null 2>&1")
 
 import argparse
 import time
@@ -196,6 +196,15 @@ def get_text_anchor(frame_idx, lms, W, H, idx, prev_center_x=None, smooth=False)
 
     return text_anchor_x, anchor_side, smoothed_center_x
 
+def scale_fonts_and_lines(frame_height, base_scale, base_thick, base_height=1920):
+#    import pdb
+#    pdb.set_trace()
+    if (frame_height < 1080):
+        frame_height = 1080
+    scale = base_scale * (frame_height / base_height)
+#   thick = max(1, int(base_thick * (frame_height / base_height)))
+    thick = int(base_thick * (frame_height / base_height))
+    return scale, thick
     
 
 
@@ -213,10 +222,10 @@ def process_video(
     show_debug=False,
     show_debug_windows=False,
     # size controls (initial)
-    font_scale=0.5,
+    font_scale=1,
     text_thickness=1,
-    line_thickness=2,
-    dot_radius=3,
+    line_thickness=1,
+    dot_radius=1,
 ):
 
     if args.save_frames:
@@ -272,12 +281,20 @@ def process_video(
         ctrl_win = "Controls"
         cv2.namedWindow(ctrl_win, cv2.WINDOW_NORMAL)
         # cv2.createTrackbar("Font x10", ctrl_win, int(font_scale * 10), 50, lambda v: None) # ORIG
-        cv2.createTrackbar("Font", ctrl_win, int(font_scale * 10), 50, lambda v: None) # NEW
+        # cv2.createTrackbar("Font", ctrl_win, int(font_scale * 10), 50, lambda v: None) # NEW
+#         cv2.createTrackbar("TextThick", ctrl_win, int(text_thickness), 6, lambda v: None)
+#         cv2.createTrackbar("LineThick", ctrl_win, int(line_thickness), 10, lambda v: None)
+#         cv2.createTrackbar("DotRadius", ctrl_win, int(dot_radius), 12, lambda v: None)
+
+
+        cv2.createTrackbar("Font", ctrl_win, int(font_scale)-1, 4, lambda v: None) # NEW
+        cv2.createTrackbar("TextThick", ctrl_win, int(text_thickness)-1, 4, lambda v: None)
+        cv2.createTrackbar("LineThick", ctrl_win, int(line_thickness)-1, 4, lambda v: None)
+        cv2.createTrackbar("DotRadius", ctrl_win, int(dot_radius)-1, 4, lambda v: None)
         
-        print(f"FONT_scale is {font_scale}")
-        cv2.createTrackbar("TextThick", ctrl_win, int(text_thickness), 6, lambda v: None)
-        cv2.createTrackbar("LineThick", ctrl_win, int(line_thickness), 10, lambda v: None)
-        cv2.createTrackbar("DotRadius", ctrl_win, int(dot_radius), 12, lambda v: None)
+    print(f"HEIGHT = {H}")
+    font_scale, text_thickness = scale_fonts_and_lines(H, font_scale, text_thickness)
+
 
     pbar = tqdm(total=nframes if nframes > 0 else None, desc="Processing frames")
     t0 = time.time()
@@ -293,20 +310,23 @@ def process_video(
 
             # Read live sizes from sliders (if enabled)
             if show_debug_windows:
-                fs10 = cv2.getTrackbarPos("Font", "Controls") #NEW
+                font_scale = cv2.getTrackbarPos("Font", "Controls") + 1 #NEW 
                 # fs10 = cv2.getTrackbarPos("Font x10", "Controls") # ORIG
-                tt   = cv2.getTrackbarPos("TextThick", "Controls")
-                lt   = cv2.getTrackbarPos("LineThick", "Controls")
-                dr   = cv2.getTrackbarPos("DotRadius", "Controls")
+                text_thickness   = cv2.getTrackbarPos("TextThick", "Controls") + 1
+                line_thickness   = cv2.getTrackbarPos("LineThick", "Controls") + 1
+                dot_radius   = cv2.getTrackbarPos("DotRadius", "Controls") + 1
+
                 
-                print(f"frame_index = {frame_idx} fs10  = {fs10}, textthick = {tt}, linethick = {lt}, dotradius = {dr}")
-                font_scale     = max(0.1, fs10 / 10.0)
+                font_scale_adjusted, text_thickness_adjusted = scale_fonts_and_lines(H, font_scale, text_thickness)
+                print(f"frame_index = {frame_idx} font_scale = {font_scale} -> {font_scale_adjusted}, textthick = {text_thickness} -> {text_thickness_adjusted}, linethick = {line_thickness}, dotradius = {dot_radius}")
+                font_scale = font_scale_adjusted
+                text_thickness = text_thickness_adjusted
 
                 # print(f"font_scale is {font_scale}")
 
-                text_thickness = max(1, tt)
-                line_thickness = max(1, lt)
-                dot_radius     = max(1, dr)
+#                 text_thickness = max(1, tt)
+#                 line_thickness = max(1, lt)
+#                 dot_radius     = max(1, dr)
 
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             res = pose.process(rgb)
@@ -695,10 +715,10 @@ if __name__ == "__main__":
                         help="Temporal smoothing window size for numeric angles (frames).")
 
     # Size controls: small defaults restored
-    parser.add_argument("--font-scale", type=float, default=0.5, help="Initial font scale for labels (default 0.5, range .1-5)")
-    parser.add_argument("--text-thickness", type=int, default=1, help="Initial text thickness (default 1, range 1-6)")
-    parser.add_argument("--line-thickness", type=int, default=2, help="Initial line thickness (default 2, range 1-10)")
-    parser.add_argument("--dot-radius", type=int, default=3, help="Initial joint dot radius (default 3, range 1-12)")
+    parser.add_argument("--font-scale", type=float, default=1, help="Initial font scale for labels (default 1, range 1-5)")
+    parser.add_argument("--text-thickness", type=int, default=1, help="Initial text thickness (default 1, range 1-5)")
+    parser.add_argument("--line-thickness", type=int, default=1, help="Initial line thickness (default 1, range 1-5)")
+    parser.add_argument("--dot-radius", type=int, default=1, help="Initial joint dot radius (default 1, range 1-5)")
 
     parser.add_argument(
         "--overlay-position",
