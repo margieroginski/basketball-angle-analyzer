@@ -5,6 +5,9 @@ import platform
 import subprocess
 import streamlit as st
 
+
+SUPPORTED_EXTENSIONS = {".mp4", ".mov"}
+
 st.set_page_config(page_title="Basketball Angle Analyzer", layout="centered")
 
 st.title("🏀 Basketball Angle Analyzer")
@@ -15,11 +18,17 @@ st.write("Upload a side-view basketball video and choose which body angles to an
 # ────────────────────────────────────────────────────────────────────────────────
 # File upload
 # ────────────────────────────────────────────────────────────────────────────────
-uploaded_file = st.file_uploader("Upload your .mp4 video", type=["mp4"])
+uploaded_file = st.file_uploader("Upload your .mp4 or .mov video", type=["mp4", "mov"])
 input_path = "input.mp4"
 output_path = "annotated.mp4"
 
 if uploaded_file:
+    _, ext = os.path.splitext(uploaded_file.name)
+    ext = ext.lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        ext = ".mp4"
+    input_path = f"input{ext}"
+
     with open(input_path, "wb") as f:
         f.write(uploaded_file.read())
     st.success(f"✅ Uploaded: {uploaded_file.name}")
