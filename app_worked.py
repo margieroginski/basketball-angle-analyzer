@@ -2,6 +2,7 @@ import streamlit as st
 import subprocess
 import os
 
+
 st.set_page_config(page_title="Basketball Angle Analyzer", layout="centered")
 
 st.title("🏀 Basketball Angle Analyzer")
